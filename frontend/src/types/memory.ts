@@ -1,8 +1,7 @@
 /**
  * TRINITI Memory System Types
  *
- * Defines the core interfaces and types for the memory management system
- * that tracks task executions, results, and metadata.
+ * Comprehensive type definitions for the memory management system
  */
 
 export interface MemoryEntry {
@@ -13,29 +12,30 @@ export interface MemoryEntry {
   metadata: {
     success: boolean;   // Task completion status
     duration: number;   // Execution time in milliseconds
-    errors?: string[];  // Any encountered errors
+    errors: string[];   // Any encountered errors
     tags?: string[];    // Optional categorization tags
     priority?: number;  // Task priority level (1-10)
   };
 }
 
 export interface MemorySearchOptions {
-  limit?: number;       // Maximum number of results
-  includeErrors?: boolean; // Include failed tasks
-  tags?: string[];      // Filter by tags
+  query?: string;
+  includeErrors?: boolean;
+  tags?: string[];
   dateRange?: {
     start: number;
     end: number;
   };
+  limit?: number;
+  sortBy?: 'timestamp' | 'duration' | 'relevance';
+  sortOrder?: 'asc' | 'desc';
 }
 
 export interface MemoryCapabilities {
   storageLimit: number;
-  persistenceSupport: boolean;
-  searchCapability: boolean;
-  metadataTracking: boolean;
-  tagSupport: boolean;
-  prioritySupport: boolean;
+  maxEntrySize: number;
+  supportedFormats: string[];
+  features: string[];
 }
 
 export interface MemoryStats {
@@ -43,6 +43,36 @@ export interface MemoryStats {
   successfulTasks: number;
   failedTasks: number;
   averageDuration: number;
-  mostCommonTags: Array<{ tag: string; count: number }>;
   storageUsage: number; // Percentage of capacity used
+  mostCommonTags: Array<{ tag: string; count: number }>;
+}
+
+export interface MemorySearchResult {
+  entries: MemoryEntry[];
+  totalCount: number;
+  searchTime: number;
+  suggestions?: string[];
+}
+
+export interface MemoryPattern {
+  commonTasks: Array<{ task: string; count: number; avgDuration: number }>;
+  timePatterns: Array<{ hour: number; count: number; successRate: number }>;
+  tagPatterns: Array<{ tag: string; count: number; avgDuration: number }>;
+}
+
+export interface MemoryExport {
+  version: string;
+  timestamp: number;
+  entries: MemoryEntry[];
+  metadata: {
+    totalEntries: number;
+    exportDate: string;
+  };
+}
+
+export interface MemoryImportResult {
+  success: boolean;
+  importedCount: number;
+  errors: string[];
+  warnings: string[];
 }

@@ -1,129 +1,150 @@
 /**
- * TRINITI Memory System
+ * TRINITI Memory System - Enhanced Version
  *
- * A comprehensive memory management system for tracking task executions,
- * results, and metadata with persistence and search capabilities.
+ * A comprehensive memory management system for AI-assisted development
+ * with advanced persistence, search, and pattern recognition capabilities.
  */
 
-import {
-  MemoryEntry,
-  MemorySearchOptions,
-  MemoryCapabilities,
-  MemoryStats
-} from '../types/memory';
+import { MemoryEntry, MemorySearchOptions, MemoryStats, MemoryCapabilities } from '../types/memory';
+import { PersistenceManager } from './PersistenceManager';
+import { MemorySearchEngine, SearchOptions, SimilarityResult } from './MemorySearchEngine';
 import { safeguardString, safeguardNumber, safeguardBoolean } from '../utils/defensive-programming';
 
 export class TRINITIMemorySystem {
-  private storage: Map<string, MemoryEntry> = new Map();
-  private readonly MAX_ENTRIES = 1000;
-  private readonly STORAGE_KEY_PREFIX = 'triniti_memory_';
-  private readonly STATS_KEY = 'triniti_memory_stats';
-
-  // Memory system capabilities
-  public readonly capabilities: MemoryCapabilities = {
-    storageLimit: this.MAX_ENTRIES,
-    persistenceSupport: true,
-    searchCapability: true,
-    metadataTracking: true,
-    tagSupport: true,
-    prioritySupport: true
-  };
+  private entries: MemoryEntry[] = [];
+  private persistenceManager: PersistenceManager;
+  private searchEngine: MemorySearchEngine;
+  private stats: MemoryStats;
+  private capabilities: MemoryCapabilities;
+  private isInitialized = false;
 
   constructor() {
-    this.loadFromDisk();
-    this.initializeStats();
+    this.persistenceManager = new PersistenceManager();
+    this.searchEngine = new MemorySearchEngine([]);
+    this.stats = this.initializeStats();
+    this.capabilities = this.initializeCapabilities();
+  }
+
+  /**
+   * Initialize the memory system
+   */
+  async initialize(): Promise<void> {
+    try {
+      // Load existing entries from persistence
+      this.entries = await this.persistenceManager.retrieveEntries();
+
+      // Update search engine with loaded entries
+      this.searchEngine.updateEntries(this.entries);
+
+      // Update statistics
+      this.updateStats();
+
+      this.isInitialized = true;
+      console.debug('TRINITI Memory System initialized', {
+        entryCount: this.entries.length
+      });
+    } catch (error) {
+      console.error('Failed to initialize TRINITI Memory System', error);
+      throw error;
+    }
   }
 
   /**
    * Record a new task execution
    */
-  public record(
+  async recordTask(
     task: string,
     result: unknown,
-    options?: {
-      success?: boolean;
-      tags?: string[];
-      priority?: number;
-      duration?: number;
+    metadata: Partial<MemoryEntry['metadata']> = {}
+  ): Promise<string> {
+    if (!this.isInitialized) {
+      await this.initialize();
     }
-  ): string {
+
     const startTime = performance.now();
 
-    const entry: MemoryEntry = {
-      id: this.generateUniqueId(),
-      timestamp: Date.now(),
-      task: safeguardString(task, ''),
-      result,
-      metadata: {
-        success: safeguardBoolean(options?.success, true),
-        duration: safeguardNumber(options?.duration, 0),
-        errors: this.extractErrors(result),
-        tags: options?.tags || [],
-        priority: safeguardNumber(options?.priority, 5)
-      }
-    };
+    try {
+      const entry: MemoryEntry = {
+        id: this.generateUniqueId(),
+        timestamp: Date.now(),
+        task: safeguardString(task, 'Unknown task'),
+        result: result || {},
+        metadata: {
+          success: safeguardBoolean(metadata.success, true),
+          duration: 0, // Will be calculated after task completion
+          errors: Array.isArray(metadata.errors) ? metadata.errors : [],
+          tags: Array.isArray(metadata.tags) ? metadata.tags : [],
+          priority: safeguardNumber(metadata.priority, 5)
+        }
+      };
 
-    // Measure actual execution time if not provided
-    if (!options?.duration) {
+      // Calculate duration
       entry.metadata.duration = performance.now() - startTime;
+
+      // Validate entry
+      if (!this.validateEntry(entry)) {
+        throw new Error('Invalid memory entry structure');
+      }
+
+      // Save to persistence
+      await this.persistenceManager.saveEntry(entry);
+
+      // Add to memory
+      this.entries.push(entry);
+      this.searchEngine.updateEntries(this.entries);
+
+      // Update statistics
+      this.updateStats();
+
+      console.debug('Task recorded successfully', {
+        entryId: entry.id,
+        task: entry.task
+      });
+
+      return entry.id;
+    } catch (error) {
+      console.error('Failed to record task', error);
+      throw error;
     }
-
-    this.prune();
-    this.storage.set(entry.id, entry);
-    this.persistToDisk(entry);
-    this.updateStats(entry);
-
-    return entry.id;
   }
 
   /**
-   * Retrieve recent memory entries
+   * Search for memory entries with advanced filtering
    */
-  public getRecentTasks(limit: number = 10): MemoryEntry[] {
-    const safeLimit = safeguardNumber(limit, 10);
-    return Array.from(this.storage.values())
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, safeLimit);
+  search(options: SearchOptions = {}): {
+    entries: MemoryEntry[];
+    totalCount: number;
+    searchTime: number;
+    suggestions?: string[];
+  } {
+    if (!this.isInitialized) {
+      console.warn('Memory system not initialized, returning empty results');
+      return { entries: [], totalCount: 0, searchTime: 0 };
+    }
+
+    return this.searchEngine.search(options);
   }
 
   /**
-   * Find tasks by partial match with advanced search options
+   * Find similar tasks using intelligent similarity matching
    */
-  public searchTasks(query: string, options?: MemorySearchOptions): MemoryEntry[] {
-    const safeQuery = safeguardString(query, '');
-    let results = Array.from(this.storage.values());
+  findSimilarTasks(
+    task: string,
+    threshold: number = 0.7,
+    limit: number = 10
+  ): SimilarityResult[] {
+    if (!this.isInitialized) return [];
 
-    // Text search
-    if (safeQuery) {
-      results = results.filter(entry =>
-        entry.task.toLowerCase().includes(safeQuery.toLowerCase()) ||
-        this.searchInResult(entry.result, safeQuery)
-      );
-    }
+    return this.searchEngine.findSimilarTasks(task, threshold, limit);
+  }
 
-    // Filter by success status
-    if (options?.includeErrors === false) {
-      results = results.filter(entry => entry.metadata.success);
-    }
+  /**
+   * Get recent tasks
+   */
+  getRecentTasks(limit: number = 20): MemoryEntry[] {
+    if (!this.isInitialized) return [];
 
-    // Filter by tags
-    if (options?.tags && options.tags.length > 0) {
-      results = results.filter(entry =>
-        options.tags!.some(tag => entry.metadata.tags?.includes(tag))
-      );
-    }
-
-    // Filter by date range
-    if (options?.dateRange) {
-      results = results.filter(entry =>
-        entry.timestamp >= options.dateRange!.start &&
-        entry.timestamp <= options.dateRange!.end
-      );
-    }
-
-    // Sort by timestamp and limit results
-    const limit = safeguardNumber(options?.limit, results.length);
-    return results
+    return this.entries
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, limit);
   }
@@ -131,106 +152,126 @@ export class TRINITIMemorySystem {
   /**
    * Get memory statistics
    */
-  public getStats(): MemoryStats {
-    const entries = Array.from(this.storage.values());
-    const successfulTasks = entries.filter(entry => entry.metadata.success).length;
-    const failedTasks = entries.length - successfulTasks;
-
-    const totalDuration = entries.reduce((sum, entry) => sum + entry.metadata.duration, 0);
-    const averageDuration = entries.length > 0 ? totalDuration / entries.length : 0;
-
-    // Calculate most common tags
-    const tagCounts = new Map<string, number>();
-    entries.forEach(entry => {
-      entry.metadata.tags?.forEach(tag => {
-        tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
-      });
-    });
-
-    const mostCommonTags = Array.from(tagCounts.entries())
-      .map(([tag, count]) => ({ tag, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
-
-    return {
-      totalEntries: entries.length,
-      successfulTasks,
-      failedTasks,
-      averageDuration,
-      mostCommonTags,
-      storageUsage: (entries.length / this.MAX_ENTRIES) * 100
-    };
+  getStats(): MemoryStats {
+    return { ...this.stats };
   }
 
   /**
-   * Get a specific memory entry by ID
+   * Get system capabilities
    */
-  public getEntry(id: string): MemoryEntry | undefined {
-    return this.storage.get(safeguardString(id, ''));
-  }
-
-  /**
-   * Delete a memory entry
-   */
-  public deleteEntry(id: string): boolean {
-    const safeId = safeguardString(id, '');
-    const deleted = this.storage.delete(safeId);
-    if (deleted) {
-      this.removeFromDisk(safeId);
-      this.updateStats();
-    }
-    return deleted;
+  getCapabilities(): MemoryCapabilities {
+    return { ...this.capabilities };
   }
 
   /**
    * Clear all memory entries
    */
-  public clear(): void {
-    this.storage.clear();
-    this.clearFromDisk();
-    this.initializeStats();
-  }
-
-  /**
-   * Export memory data
-   */
-  public export(): MemoryEntry[] {
-    return Array.from(this.storage.values());
-  }
-
-  /**
-   * Import memory data
-   */
-  public import(entries: MemoryEntry[]): void {
-    entries.forEach(entry => {
-      if (this.validateEntry(entry)) {
-        this.storage.set(entry.id, entry);
-        this.persistToDisk(entry);
-      }
-    });
-    this.updateStats();
-  }
-
-  // Private helper methods
-
-  private prune(): void {
-    if (this.storage.size >= this.MAX_ENTRIES) {
-      const entries = Array.from(this.storage.entries());
-      const oldestEntry = entries.reduce((oldest, current) =>
-        current[1].timestamp < oldest[1].timestamp ? current : oldest
-      );
-
-      if (oldestEntry) {
-        this.storage.delete(oldestEntry[0]);
-        this.removeFromDisk(oldestEntry[0]);
-      }
+  async clearAll(): Promise<void> {
+    try {
+      await this.persistenceManager.clearAllEntries();
+      this.entries = [];
+      this.searchEngine.updateEntries([]);
+      this.updateStats();
+      console.debug('All memory entries cleared');
+    } catch (error) {
+      console.error('Failed to clear memory entries', error);
+      throw error;
     }
   }
 
+  /**
+   * Export all data
+   */
+  async exportData(): Promise<string> {
+    return this.persistenceManager.exportData();
+  }
+
+  /**
+   * Import data
+   */
+  async importData(jsonData: string): Promise<number> {
+    try {
+      const importCount = await this.persistenceManager.importData(jsonData);
+
+      // Reload entries after import
+      this.entries = await this.persistenceManager.retrieveEntries();
+      this.searchEngine.updateEntries(this.entries);
+      this.updateStats();
+
+      return importCount;
+    } catch (error) {
+      console.error('Failed to import data', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get storage statistics
+   */
+  getStorageStats(): {
+    totalEntries: number;
+    storageSize: number;
+    lastUpdated: number;
+    availableSpace: number;
+  } {
+    return this.persistenceManager.getStorageStats();
+  }
+
+  /**
+   * Find patterns in task execution
+   */
+  findPatterns(): {
+    commonTasks: Array<{ task: string; count: number; avgDuration: number }>;
+    timePatterns: Array<{ hour: number; count: number; successRate: number }>;
+    tagPatterns: Array<{ tag: string; count: number; avgDuration: number }>;
+  } {
+    if (!this.isInitialized) {
+      return {
+        commonTasks: [],
+        timePatterns: [],
+        tagPatterns: []
+      };
+    }
+
+    return this.searchEngine.findPatterns();
+  }
+
+  /**
+   * Get search suggestions
+   */
+  getSuggestions(query: string): string[] {
+    if (!this.isInitialized) return [];
+    return this.searchEngine.getSuggestions(query);
+  }
+
+  /**
+   * Delete a specific entry
+   */
+  async deleteEntry(entryId: string): Promise<boolean> {
+    try {
+      const success = await this.persistenceManager.deleteEntry(entryId);
+      if (success) {
+        this.entries = this.entries.filter(entry => entry.id !== entryId);
+        this.searchEngine.updateEntries(this.entries);
+        this.updateStats();
+      }
+      return success;
+    } catch (error) {
+      console.error('Failed to delete entry', error);
+      return false;
+    }
+  }
+
+  /**
+   * Generate a unique ID for memory entries
+   */
   private generateUniqueId(): string {
     return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
+  /**
+   * Extract error information from a result object
+   */
   private extractErrors(result: unknown): string[] {
     if (result instanceof Error) {
       return [result.message];
@@ -252,6 +293,9 @@ export class TRINITIMemorySystem {
     return [];
   }
 
+  /**
+   * Search within a result object for matching text
+   */
   private searchInResult(result: unknown, query: string): boolean {
     if (typeof result === 'string') {
       return result.toLowerCase().includes(query.toLowerCase());
@@ -265,60 +309,9 @@ export class TRINITIMemorySystem {
     return false;
   }
 
-  private persistToDisk(entry: MemoryEntry): void {
-    try {
-      localStorage.setItem(
-        `${this.STORAGE_KEY_PREFIX}${entry.id}`,
-        JSON.stringify(entry)
-      );
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('TRINITI.MEMORY_PERSISTENCE_FAILED', error);
-    }
-  }
-
-  private removeFromDisk(id: string): void {
-    try {
-      localStorage.removeItem(`${this.STORAGE_KEY_PREFIX}${id}`);
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('TRINITI.MEMORY_REMOVAL_FAILED', error);
-    }
-  }
-
-  private loadFromDisk(): void {
-    try {
-      Object.keys(localStorage)
-        .filter(key => key.startsWith(this.STORAGE_KEY_PREFIX))
-        .forEach(key => {
-          try {
-            const entry = JSON.parse(localStorage.getItem(key)!);
-            if (this.validateEntry(entry)) {
-              this.storage.set(entry.id, entry);
-            }
-          } catch (error) {
-            // eslint-disable-next-line no-console
-            console.warn('TRINITI.MEMORY_LOAD_FAILED', key, error);
-            localStorage.removeItem(key);
-          }
-        });
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('TRINITI.MEMORY_BULK_LOAD_FAILED', error);
-    }
-  }
-
-  private clearFromDisk(): void {
-    try {
-      Object.keys(localStorage)
-        .filter(key => key.startsWith(this.STORAGE_KEY_PREFIX))
-        .forEach(key => localStorage.removeItem(key));
-    } catch (error) {
-      // eslint-disable-next-line no-console
-      console.warn('TRINITI.MEMORY_CLEAR_FAILED', error);
-    }
-  }
-
+  /**
+   * Validate a memory entry
+   */
   private validateEntry(entry: unknown): entry is MemoryEntry {
     if (!entry || typeof entry !== 'object') return false;
 
@@ -333,12 +326,68 @@ export class TRINITIMemorySystem {
     );
   }
 
-  private initializeStats(): void {
-    this.updateStats();
+  /**
+   * Update statistics based on current entries
+   */
+  private updateStats(): void {
+    const successful = this.entries.filter(entry => entry.metadata.success);
+    const failed = this.entries.filter(entry => !entry.metadata.success);
+
+    this.stats = {
+      totalEntries: this.entries.length,
+      successfulTasks: successful.length,
+      failedTasks: failed.length,
+      averageDuration: this.entries.length > 0
+        ? this.entries.reduce((sum, entry) => sum + entry.metadata.duration, 0) / this.entries.length
+        : 0,
+      storageUsage: (this.entries.length / this.capabilities.storageLimit) * 100,
+      mostCommonTags: this.getMostCommonTags(this.entries)
+    };
   }
 
-  private updateStats(entry?: MemoryEntry): void {
-    // Stats are calculated on-demand, so we don't need to store them
-    // This method can be used for future optimizations
+  /**
+   * Get most common tags from entries
+   */
+  private getMostCommonTags(entries: MemoryEntry[]): Array<{ tag: string; count: number }> {
+    const tagCounts = new Map<string, number>();
+
+    entries.forEach(entry => {
+      if (entry.metadata.tags) {
+        entry.metadata.tags.forEach(tag => {
+          tagCounts.set(tag, (tagCounts.get(tag) || 0) + 1);
+        });
+      }
+    });
+
+    return Array.from(tagCounts.entries())
+      .map(([tag, count]) => ({ tag, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  }
+
+  /**
+   * Initialize default statistics
+   */
+  private initializeStats(): MemoryStats {
+    return {
+      totalEntries: 0,
+      successfulTasks: 0,
+      failedTasks: 0,
+      averageDuration: 0,
+      storageUsage: 0,
+      mostCommonTags: []
+    };
+  }
+
+  /**
+   * Initialize system capabilities
+   */
+  private initializeCapabilities(): MemoryCapabilities {
+    return {
+      storageLimit: 10000,
+      maxEntrySize: 1024 * 1024, // 1MB
+      supportedFormats: ['json', 'text'],
+      features: ['persistence', 'search', 'patterns', 'similarity']
+    };
   }
 }

@@ -1,10 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import OpenHands from "#/api/open-hands";
+import { safeguardApiCall } from "#/utils/defensive-programming";
 
 const fetchAiConfigOptions = async () => ({
-  models: await OpenHands.getModels(),
-  agents: await OpenHands.getAgents(),
-  securityAnalyzers: await OpenHands.getSecurityAnalyzers(),
+  models: await safeguardApiCall(OpenHands.getModels, []),
+  agents: await safeguardApiCall(OpenHands.getAgents, []),
+  securityAnalyzers: await safeguardApiCall(OpenHands.getSecurityAnalyzers, []),
 });
 
 export const useAIConfigOptions = () =>

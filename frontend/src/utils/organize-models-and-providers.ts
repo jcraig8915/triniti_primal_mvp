@@ -1,4 +1,5 @@
 import { extractModelAndProvider } from "./extract-model-and-provider";
+import { safeguardModelIteration } from "./defensive-programming";
 
 /**
  * Given a list of models, organize them by provider
@@ -27,24 +28,33 @@ import { extractModelAndProvider } from "./extract-model-and-provider";
 export const organizeModelsAndProviders = (models: string[]) => {
   const object: Record<string, { separator: string; models: string[] }> = {};
 
-  models.forEach((model) => {
-    const {
-      separator,
-      provider,
-      model: modelId,
-    } = extractModelAndProvider(model);
+  // Apply defensive programming
+  const safeModels = safeguardModelIteration(models);
 
-    // Ignore "anthropic" providers with a separator of "."
-    // These are outdated and incompatible providers.
-    if (provider === "anthropic" && separator === ".") {
-      return;
-    }
+  safeModels.forEach((model) => {
+    try {
+      const {
+        separator,
+        provider,
+        model: modelId,
+      } = extractModelAndProvider(model);
 
-    const key = provider || "other";
-    if (!object[key]) {
-      object[key] = { separator, models: [] };
+      // Ignore "anthropic" providers with a separator of "."
+      // These are outdated and incompatible providers.
+      if (provider === "anthropic" && separator === ".") {
+        return;
+      }
+
+      const key = provider || "other";
+      if (!object[key]) {
+        object[key] = { separator, models: [] };
+      }
+      object[key].models.push(modelId);
+    } catch (error) {
+      // eslint-disable-next-line no-console
+      console.error("DEFENSIVE.MODEL_PROCESSING_ERROR", model, error);
+      // Continue processing other models
     }
-    object[key].models.push(modelId);
   });
 
   return object;

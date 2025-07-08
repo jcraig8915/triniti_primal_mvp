@@ -53,6 +53,9 @@ export function UnifiedTaskRunner({
     'TASK_SUGGESTIONS.SEARCH_FUNCTIONS',
     'TASK_SUGGESTIONS.GENERATE_COMPONENT',
     'TASK_SUGGESTIONS.GIT_COMMIT',
+    'Create a file called test.txt with content "Hello TRINITI!"',
+    'Read the file test.txt',
+    'Delete the file test.txt',
     'file_operation:create:./test.txt:Hello TRINITI!',
     'file_operation:read:./test.txt',
     'file_operation:delete:./test.txt'

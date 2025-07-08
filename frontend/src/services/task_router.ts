@@ -5,6 +5,16 @@
 
 import { TaskCommand } from "../types/task";
 
+// Enhanced command types to support different execution paths
+export interface ParsedCommand {
+  type: "file_operation" | "shell_command" | "general";
+  operation?: "create" | "read" | "delete";
+  path?: string;
+  content?: string;
+  command?: string;
+  description: string;
+}
+
 type KnownAction =
   | { match: RegExp; template: (inp: string) => string }
   | { keywords: string[]; template: (inp: string) => string };
@@ -97,10 +107,75 @@ const ACTIONS: KnownAction[] = [
 ];
 
 /**
+ * Parse file operations from natural language input
+ */
+export function parseFileOperation(input: string): ParsedCommand | null {
+  // Check for explicit file_operation format first
+  const fileOpPattern = /^file_operation:(create|read|delete):([^:]+)(?::(.+))?$/;
+  const fileOpMatch = input.match(fileOpPattern);
+
+  if (fileOpMatch) {
+    const [_, operation, path, content] = fileOpMatch;
+    return {
+      type: "file_operation",
+      operation: operation as "create" | "read" | "delete",
+      path: path.trim(),
+      content: content || "",
+      description: input
+    };
+  }
+
+  // Natural language pattern recognition for file operations
+  const createFilePattern = /(create|write|make|new)\s+(?:a\s+)?file\s+(?:called|named)?\s+"?([^"]+)"?\s+(?:with\s+content\s+"?([^"]+)"?)?/i;
+  const readFilePattern = /(read|open|show|display|cat)\s+(?:the\s+)?file\s+"?([^"]+)"?/i;
+  const deleteFilePattern = /(delete|remove|erase)\s+(?:the\s+)?file\s+"?([^"]+)"?/i;
+
+  const createMatch = input.match(createFilePattern);
+  const readMatch = input.match(readFilePattern);
+  const deleteMatch = input.match(deleteFilePattern);
+
+  if (createMatch) {
+    return {
+      type: "file_operation",
+      operation: "create",
+      path: createMatch[2].trim(),
+      content: createMatch[3] || "",
+      description: input
+    };
+  } else if (readMatch) {
+    return {
+      type: "file_operation",
+      operation: "read",
+      path: readMatch[2].trim(),
+      content: "",
+      description: input
+    };
+  } else if (deleteMatch) {
+    return {
+      type: "file_operation",
+      operation: "delete",
+      path: deleteMatch[2].trim(),
+      content: "",
+      description: input
+    };
+  }
+
+  return null;
+}
+
+/**
  * Routes natural language input to executable commands
  */
 export function routeTask(nlInput: string): TaskCommand {
-  // Exact / RegExp matching
+  // First, check for file operations
+  const fileOp = parseFileOperation(nlInput);
+  if (fileOp) {
+    // Convert file operation to the expected format for the backend
+    const command = `file_operation:${fileOp.operation}:${fileOp.path}${fileOp.content ? `:${fileOp.content}` : ''}`;
+    return { raw: command, description: nlInput };
+  }
+
+  // Exact / RegExp matching for other commands
   for (const act of ACTIONS) {
     if ("match" in act && act.match.test(nlInput)) {
       return { raw: act.template(nlInput), description: nlInput };

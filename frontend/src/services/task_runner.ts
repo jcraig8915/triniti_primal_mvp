@@ -4,9 +4,10 @@
  */
 
 import axios from "axios";
-import { routeTask } from "./task_router";
+import { routeTask, parseFileOperation } from "./task_router";
 import { guardedExec } from "./error_guard";
 import { TaskResult, TaskExecutionRequest, TaskExecutionResponse } from "../types/task";
+import { runFileOperation } from "../api/taskRunner";
 
 // API Configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL ||
@@ -14,12 +15,54 @@ const API_BASE_URL = import.meta.env.VITE_API_URL ||
                     'http://localhost:3000';
 
 /**
+ * Execute file operations directly via FileOps API
+ */
+export async function executeFileOperation(
+  operation: "create" | "read" | "delete",
+  path: string,
+  content: string = ""
+): Promise<TaskResult> {
+  console.log(`🧠 Executing file operation: ${operation} -> ${path}`);
+
+  return guardedExec(async () => {
+    try {
+      const result = await runFileOperation(operation, path, content);
+
+      console.log(`✅ File operation result:`, {
+        success: result.success,
+        output: result.output
+      });
+
+      return {
+        success: result.success,
+        output: result.output,
+        error: result.success ? undefined : result.output
+      };
+    } catch (error: any) {
+      console.error(`❌ File operation failed:`, error);
+      return {
+        success: false,
+        output: "",
+        error: error.message || "File operation failed"
+      };
+    }
+  });
+}
+
+/**
  * Execute a task from natural language input
  */
 export async function runTask(nlRequest: string): Promise<TaskResult> {
   console.log(`🤖 Processing natural language request: "${nlRequest}"`);
 
-  // Natural language to concrete command
+  // First, check if this is a file operation
+  const fileOp = parseFileOperation(nlRequest);
+  if (fileOp && fileOp.operation && fileOp.path) {
+    console.log(`🧠 Detected file operation: ${fileOp.operation} -> ${fileOp.path}`);
+    return executeFileOperation(fileOp.operation, fileOp.path, fileOp.content || "");
+  }
+
+  // Natural language to concrete command for other operations
   const task = routeTask(nlRequest);
   console.log(`🔧 Routed to command: "${task.raw}"`);
 

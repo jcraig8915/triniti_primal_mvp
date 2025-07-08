@@ -5,14 +5,20 @@ from typing import Dict, Any, List, Optional
 import json
 import time
 import uuid
+import asyncio
 from datetime import datetime
 
 app = FastAPI(title="TRINITI Backend Server", version="1.0.0")
 
-# CORS middleware
+# CORS middleware - Updated for unified development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[
+        "http://localhost:3000",  # Backend
+        "http://localhost:3001",  # Frontend
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -201,87 +207,205 @@ class TaskExecutor:
 
         return tags
 
-# Initialize task executor
+# Initialize task executor instance
 task_executor = TaskExecutor()
 
-# Task Execution Endpoint
-@app.post("/api/run-task", response_model=TaskExecutionResponse)
-async def run_task(request: TaskExecutionRequest):
-    """Execute a task and return results"""
+# API Endpoints
+@app.get("/")
+async def root():
+    return {
+        "message": "TRINITI Backend Server",
+        "status": "running",
+        "version": "1.0.0",
+        "endpoints": {
+            "task_execution": "/api/execute",
+            "task_history": "/api/tasks",
+            "task_statistics": "/api/tasks/stats",
+            "health_check": "/api/health"
+        }
+    }
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "healthy",
+        "service": "triniti-backend",
+        "timestamp": datetime.now().isoformat()
+    }
+
+@app.get("/api/status")
+async def api_status():
+    return {
+        "backend": "running",
+        "frontend": "http://localhost:3001",
+        "ready": True,
+        "task_runner": "available"
+    }
+
+# Unified Task Execution API Endpoints
+class UnifiedTaskRequest(BaseModel):
+    command: str
+    metadata: Optional[Dict[str, Any]] = None
+    timeout: Optional[int] = 30000
+
+class UnifiedTaskResponse(BaseModel):
+    id: str
+    success: bool
+    result: Any
+    execution_time: float
+    timestamp: int
+    metadata: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+
+@app.post("/api/execute", response_model=UnifiedTaskResponse)
+async def execute_task_unified(req: UnifiedTaskRequest):
+    """
+    Unified task execution endpoint for frontend integration
+    """
+    start_time = time.time()
+    task_id = f"task_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+
     try:
-        if not request.task or not request.task.strip():
-            raise HTTPException(status_code=400, detail="Task description is required")
+        # Create task execution request
+        task_request = TaskExecutionRequest(
+            task=req.command,
+            timestamp=int(time.time() * 1000)
+        )
 
-        # Set timestamp if not provided
-        if not request.timestamp:
-            request.timestamp = int(time.time() * 1000)
+        # Execute the task
+        result = await task_executor.execute_task(task_request)
 
-        result = await task_executor.execute_task(request)
-        return result
+        execution_time = time.time() - start_time
+
+        return UnifiedTaskResponse(
+            id=task_id,
+            success=result.success,
+            result=result.result,
+            execution_time=execution_time,
+            timestamp=int(time.time() * 1000),
+            metadata=req.metadata,
+            error=None if result.success else str(result.result.get('error', 'Unknown error'))
+        )
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Task execution failed: {str(e)}")
+        execution_time = time.time() - start_time
+        error_message = str(e)
 
-# Task History Endpoint
-@app.get("/api/tasks")
-async def get_task_history(limit: int = 50, offset: int = 0):
-    """Get task execution history"""
+        return UnifiedTaskResponse(
+            id=task_id,
+            success=False,
+            result={'error': error_message},
+            execution_time=execution_time,
+            timestamp=int(time.time() * 1000),
+            metadata=req.metadata,
+            error=error_message
+        )
+
+@app.get("/api/tasks", response_model=Dict[str, Any])
+async def get_task_history_unified(limit: int = 50, offset: int = 0):
+    """
+    Get task execution history in unified format
+    """
     try:
-        start = offset
-        end = start + limit
-        tasks = task_memory[start:end]
+        # Get recent tasks from memory
+        recent_tasks = task_memory[-(limit + offset):]
+
+        # Apply pagination
+        paginated_tasks = recent_tasks[offset:offset + limit]
 
         return {
-            "tasks": tasks,
+            "tasks": [
+                {
+                    "id": task["id"],
+                    "task": task["task"],
+                    "result": task["result"],
+                    "timestamp": task["timestamp"],
+                    "metadata": task["metadata"]
+                }
+                for task in paginated_tasks
+            ],
             "total": len(task_memory),
             "limit": limit,
             "offset": offset
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve task history: {str(e)}")
 
-# Task Statistics Endpoint
-@app.get("/api/tasks/stats")
-async def get_task_statistics():
-    """Get task execution statistics"""
+@app.get("/api/tasks/stats", response_model=Dict[str, Any])
+async def get_task_statistics_unified():
+    """
+    Get task execution statistics in unified format
+    """
     try:
+        if not task_memory:
+            return {
+                "totalTasks": 0,
+                "successfulTasks": 0,
+                "failedTasks": 0,
+                "successRate": 0,
+                "averageExecutionTime": 0,
+                "mostCommonTags": []
+            }
+
         total_tasks = len(task_memory)
-        successful_tasks = len([t for t in task_memory if t["metadata"]["success"]])
+        successful_tasks = sum(1 for task in task_memory if task["metadata"]["success"])
         failed_tasks = total_tasks - successful_tasks
+        success_rate = (successful_tasks / total_tasks) * 100 if total_tasks > 0 else 0
 
         # Calculate average execution time
-        total_time = sum(t["metadata"]["duration"] for t in task_memory)
-        avg_time = total_time / total_tasks if total_tasks > 0 else 0
+        execution_times = [task["metadata"]["duration"] for task in task_memory]
+        avg_execution_time = sum(execution_times) / len(execution_times) if execution_times else 0
 
         # Get most common tags
-        tag_counts = {}
+        all_tags = []
         for task in task_memory:
-            for tag in task["metadata"]["tags"]:
-                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+            all_tags.extend(task["metadata"].get("tags", []))
 
-        most_common_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+        tag_counts = {}
+        for tag in all_tags:
+            tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+        most_common_tags = [
+            {"tag": tag, "count": count}
+            for tag, count in sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+        ]
 
         return {
             "totalTasks": total_tasks,
             "successfulTasks": successful_tasks,
             "failedTasks": failed_tasks,
-            "successRate": (successful_tasks / total_tasks * 100) if total_tasks > 0 else 0,
-            "averageExecutionTime": avg_time,
-            "mostCommonTags": [{"tag": tag, "count": count} for tag, count in most_common_tags]
+            "successRate": success_rate,
+            "averageExecutionTime": avg_execution_time,
+            "mostCommonTags": most_common_tags
         }
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to retrieve statistics: {str(e)}")
 
-# Clear Task History Endpoint
 @app.delete("/api/tasks")
-async def clear_task_history():
-    """Clear all task history"""
+async def clear_task_history_unified():
+    """
+    Clear all task history
+    """
     try:
-        global task_memory
         task_memory.clear()
         return {"message": "Task history cleared successfully"}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to clear task history: {str(e)}")
+
+@app.get("/api/health")
+async def health_check():
+    """
+    Health check endpoint for the task runner API
+    """
+    return {
+        "status": "healthy",
+        "service": "triniti-task-runner",
+        "timestamp": datetime.now().isoformat(),
+        "memory_system_initialized": True
+    }
 
 # Existing endpoints (keeping for compatibility)
 @app.get("/api/options/config")

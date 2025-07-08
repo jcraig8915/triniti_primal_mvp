@@ -49,7 +49,7 @@ export const useMemorySystem = () => {
   ) => {
     setIsLoading(true);
     try {
-      const id = memorySystem.record(task, result, options);
+      const id = memorySystem.recordTask(task, result, options);
       refreshData();
       return id;
     } finally {
@@ -62,17 +62,19 @@ export const useMemorySystem = () => {
     query: string,
     options?: MemorySearchOptions
   ): MemoryEntry[] => {
-    return memorySystem.searchTasks(query, options);
+    const searchResult = memorySystem.search(options);
+    return searchResult.entries;
   }, [memorySystem]);
 
   // Get a specific entry
   const getEntry = useCallback((id: string): MemoryEntry | undefined => {
-    return memorySystem.getEntry(id);
+    const entries = memorySystem.getRecentTasks(1000); // Get all entries
+    return entries.find(entry => entry.id === id);
   }, [memorySystem]);
 
   // Delete an entry
-  const deleteEntry = useCallback((id: string): boolean => {
-    const deleted = memorySystem.deleteEntry(id);
+  const deleteEntry = useCallback(async (id: string): Promise<boolean> => {
+    const deleted = await memorySystem.deleteEntry(id);
     if (deleted) {
       refreshData();
     }
@@ -80,24 +82,24 @@ export const useMemorySystem = () => {
   }, [memorySystem, refreshData]);
 
   // Clear all entries
-  const clearAll = useCallback(() => {
-    memorySystem.clear();
+  const clearAll = useCallback(async () => {
+    await memorySystem.clearAll();
     refreshData();
   }, [memorySystem, refreshData]);
 
   // Export data
-  const exportData = useCallback((): MemoryEntry[] => {
-    return memorySystem.export();
+  const exportData = useCallback(async (): Promise<string> => {
+    return await memorySystem.exportData();
   }, [memorySystem]);
 
   // Import data
-  const importData = useCallback((entries: MemoryEntry[]) => {
-    memorySystem.import(entries);
+  const importData = useCallback(async (jsonData: string) => {
+    await memorySystem.importData(jsonData);
     refreshData();
   }, [memorySystem, refreshData]);
 
   // Get capabilities
-  const capabilities = useMemo(() => memorySystem.capabilities, [memorySystem]);
+  const capabilities = useMemo(() => memorySystem.getCapabilities(), [memorySystem]);
 
   return {
     // State

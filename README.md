@@ -155,3 +155,345 @@ For a list of open source projects and licenses used in OpenHands, please see ou
   url={https://openreview.net/forum?id=OJd3ayDDoF}
 }
 ```
+
+# 🚀 TRINITI MVP - AI Development Platform
+
+A comprehensive AI-driven development platform with task execution, memory management, and unified API integration.
+
+## 🎯 Overview
+
+TRINITI MVP is a full-stack development platform that combines:
+- **Task Execution Engine** - Execute and simulate various development tasks
+- **Memory System** - Persistent storage and retrieval of task history
+- **Unified API** - Seamless frontend-backend integration
+- **Modern UI** - Real-time feedback and comprehensive analytics
+
+## 🏗️ Architecture
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Frontend      │    │   Backend       │    │   Memory        │
+│   (React/TS)    │◄──►│   (FastAPI)     │◄──►│   System        │
+│                 │    │                 │    │                 │
+│ • Task Runner   │    │ • Task Executor │    │ • Persistence   │
+│ • Real-time UI  │    │ • API Endpoints │    │ • Search Engine │
+│ • Analytics     │    │ • CORS Support  │    │ • Statistics    │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Node.js** 16+ and **npm**
+- **Python** 3.8+ and **pip**
+- **PowerShell** (for Windows development script)
+
+### 1. Clone and Setup
+
+```bash
+git clone <repository-url>
+cd triniti_primal_mvp
+```
+
+### 2. Start Development Environment
+
+**Windows (Recommended):**
+```powershell
+.\scripts\dev-up.ps1
+```
+
+**Manual Setup:**
+```bash
+# Backend
+cd backend
+python -m venv .venv
+.venv\Scripts\activate  # Windows
+# source .venv/bin/activate  # Linux/Mac
+pip install fastapi uvicorn
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+```
+
+### 3. Access the Application
+
+- **Frontend**: http://localhost:3001
+- **Backend API**: http://localhost:3000
+- **API Documentation**: http://localhost:3000/docs
+- **Health Check**: http://localhost:3000/health
+
+## 🎯 Features
+
+### ✅ Task Execution
+- **Real-time task simulation** with multiple operation types
+- **Comprehensive error handling** with detailed feedback
+- **Execution time tracking** and performance metrics
+- **Task history** with search and filtering capabilities
+
+### ✅ Memory System
+- **Persistent storage** of task executions
+- **Advanced search** with similarity matching
+- **Pattern recognition** and analytics
+- **Data import/export** capabilities
+
+### ✅ API Integration
+- **RESTful API** with proper HTTP status codes
+- **CORS support** for cross-origin requests
+- **Health checks** and status monitoring
+- **Type-safe interfaces** with TypeScript
+
+### ✅ Modern UI
+- **Responsive design** with Tailwind CSS
+- **Real-time updates** and loading states
+- **Comprehensive analytics** dashboard
+- **Error handling** with user-friendly messages
+
+## 📁 Project Structure
+
+```
+triniti_primal_mvp/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   └── task_runner.py      # Task execution API
+│   │   └── main.py                 # FastAPI application
+│   └── backend_server.py           # Main backend server
+├── frontend/
+│   ├── src/
+│   │   ├── api/
+│   │   │   └── taskRunner.ts       # API client
+│   │   ├── components/
+│   │   │   ├── TaskRunnerComponent.tsx
+│   │   │   └── UnifiedTaskRunner.tsx
+│   │   ├── examples/
+│   │   │   ├── TaskRunnerDemo.tsx
+│   │   │   └── UnifiedTaskRunnerDemo.tsx
+│   │   ├── hooks/
+│   │   │   └── useTaskRunner.ts    # React hooks
+│   │   ├── services/
+│   │   │   └── TRINITIMemorySystem.ts
+│   │   └── types/
+│   │       └── task.ts             # TypeScript interfaces
+│   └── package.json
+├── scripts/
+│   └── dev-up.ps1                  # Development launcher
+└── README.md
+```
+
+## 🌐 API Endpoints
+
+### Task Execution
+- `POST /api/execute` - Execute a task command
+- `GET /api/tasks` - Get task execution history
+- `GET /api/tasks/stats` - Get task execution statistics
+- `DELETE /api/tasks` - Clear task history
+
+### System Status
+- `GET /api/health` - Check API health status
+- `GET /api/status` - Get API status information
+
+### Example Usage
+
+```typescript
+// Execute a task
+const result = await runTask({
+  command: "Hello, how are you?",
+  metadata: { source: "demo" }
+});
+
+// Get task history
+const history = await getTaskHistory(50, 0);
+
+// Get statistics
+const stats = await getTaskStatistics();
+```
+
+## 🎨 UI Components
+
+### TaskRunnerComponent
+Basic task execution component with:
+- Task input form
+- Real-time result display
+- Task history
+- Statistics dashboard
+
+### UnifiedTaskRunner
+Advanced component with:
+- API integration
+- Health monitoring
+- Error handling
+- Comprehensive analytics
+
+### Demo Components
+- **TaskRunnerDemo** - Showcases basic functionality
+- **UnifiedTaskRunnerDemo** - Complete system demonstration
+
+## 🧠 Memory System
+
+The TRINITI Memory System provides:
+- **Persistent storage** of task executions
+- **Advanced search** with similarity matching
+- **Pattern recognition** for task analysis
+- **Statistics and analytics** for performance insights
+
+### Features
+- Automatic task recording
+- Intelligent search and filtering
+- Data import/export capabilities
+- Performance optimization
+
+## 🔧 Development
+
+### Backend Development
+```bash
+cd backend
+python -m uvicorn app.main:app --reload --port 3000
+```
+
+### Frontend Development
+```bash
+cd frontend
+npm run dev
+```
+
+### Type Checking
+```bash
+cd frontend
+npx tsc --noEmit
+```
+
+### Building for Production
+```bash
+cd frontend
+npm run build
+```
+
+## 🚀 Deployment
+
+### Backend Deployment
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run with production server
+uvicorn app.main:app --host 0.0.0.0 --port 3000
+```
+
+### Frontend Deployment
+```bash
+# Build for production
+npm run build
+
+# Serve static files
+npx serve -s build -l 3001
+```
+
+## 📊 Monitoring
+
+### Health Checks
+- Backend health: `GET /api/health`
+- API status: `GET /api/status`
+- Task statistics: `GET /api/tasks/stats`
+
+### Logging
+- Backend logs are displayed in the terminal
+- Frontend logs are available in browser console
+- API requests are logged with timestamps
+
+## 🛠️ Configuration
+
+### Environment Variables
+```bash
+# Frontend
+REACT_APP_API_URL=http://localhost:3000
+
+# Backend
+API_HOST=0.0.0.0
+API_PORT=3000
+CORS_ORIGINS=http://localhost:3001
+```
+
+### API Configuration
+```typescript
+const API_CONFIG = {
+  baseUrl: 'http://localhost:3000',
+  timeout: 30000,
+  retryCount: 3,
+  enableLogging: true
+};
+```
+
+## 🎯 Example Tasks
+
+### Communication
+- `Hello, how are you today?`
+- `What's the weather like?`
+
+### File Operations
+- `Create a new file called test.txt`
+- `List files in the current directory`
+- `Search for files containing "react"`
+
+### Code Operations
+- `Generate a React component`
+- `Create a TypeScript interface`
+- `Search for functions in the codebase`
+
+### Version Control
+- `Git commit with message "Update task runner"`
+- `Show git status`
+- `List git branches`
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+**Backend not starting:**
+- Check Python version (3.8+ required)
+- Verify virtual environment is activated
+- Check port 3000 is available
+
+**Frontend not connecting:**
+- Verify backend is running on port 3000
+- Check CORS configuration
+- Review browser console for errors
+
+**API errors:**
+- Check API health endpoint
+- Verify network connectivity
+- Review backend logs
+
+### Debug Mode
+```bash
+# Backend with debug logging
+uvicorn app.main:app --reload --log-level debug
+
+# Frontend with verbose logging
+npm run dev -- --verbose
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## 🎉 Acknowledgments
+
+- **FastAPI** for the backend framework
+- **React** for the frontend framework
+- **Tailwind CSS** for styling
+- **TypeScript** for type safety
+
+---
+
+**🚀 Ready to build the future of AI-driven development!**

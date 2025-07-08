@@ -272,7 +272,7 @@ function MemoryDashboard({ className = '' }: MemoryDashboardProps) {
         </button>
       </div>
 
-      <style jsx>{`
+      <style>{`
         .memory-dashboard {
           padding: 20px;
           max-width: 1200px;

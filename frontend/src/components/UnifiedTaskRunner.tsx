@@ -171,6 +171,14 @@ export function UnifiedTaskRunner({
   const renderTaskResult = (taskResult: TaskResult) => {
     const { success, output, error } = taskResult;
 
+    // Helper function to format output
+    const formatOutput = (output: any) => {
+      if (typeof output === 'object' && output !== null) {
+        return JSON.stringify(output, null, 2);
+      }
+      return String(output || 'No output');
+    };
+
     return (
       <div className={`p-4 rounded-lg border ${success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
         <div className="flex items-center justify-between mb-3">
@@ -189,7 +197,7 @@ export function UnifiedTaskRunner({
           <div>
             <span className="font-medium text-gray-700">Output:</span>
             <pre className="mt-1 p-3 bg-gray-100 rounded text-sm overflow-x-auto">
-              {output || 'No output'}
+              {formatOutput(output)}
             </pre>
           </div>
 

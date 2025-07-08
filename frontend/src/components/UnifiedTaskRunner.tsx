@@ -5,9 +5,8 @@
  * using the new task runner API client.
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  runTask,
   getTaskHistory,
   getTaskStatistics,
   clearTaskHistory,
@@ -15,10 +14,11 @@ import {
   getApiStatus,
   formatExecutionTime,
   TaskRequest,
-  TaskResponse,
   TaskHistoryResponse,
   TaskStatistics as ApiTaskStatistics
 } from '../api/taskRunner';
+import { TaskResult } from '../types/task';
+import { useTaskSubmission } from '../hooks/useTaskSubmission';
 
 interface UnifiedTaskRunnerProps {
   className?: string;
@@ -34,8 +34,7 @@ export function UnifiedTaskRunner({
   showApiStatus = true
 }: UnifiedTaskRunnerProps) {
   const [taskInput, setTaskInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [result, setResult] = useState<TaskResponse | null>(null);
+  const [result, setResult] = useState<TaskResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [taskHistory, setTaskHistory] = useState<TaskHistoryResponse | null>(null);
@@ -48,13 +47,16 @@ export function UnifiedTaskRunner({
   const [apiHealth, setApiHealth] = useState<{ status: string; service: string; timestamp: string } | null>(null);
 
   const [suggestedTasks] = useState([
-    'Hello, how are you?',
-    'Create a new file',
-    'List files in directory',
-    'Search for functions',
-    'Generate a React component',
-    'Git commit changes'
+    'TASK_SUGGESTIONS.GREETING',
+    'TASK_SUGGESTIONS.CREATE_FILE',
+    'TASK_SUGGESTIONS.LIST_FILES',
+    'TASK_SUGGESTIONS.SEARCH_FUNCTIONS',
+    'TASK_SUGGESTIONS.GENERATE_COMPONENT',
+    'TASK_SUGGESTIONS.GIT_COMMIT'
   ]);
+
+  // Use the task submission hook
+  const { submitTask, isSubmitting, submissionCount } = useTaskSubmission();
 
   // Load initial data
   useEffect(() => {
@@ -63,7 +65,7 @@ export function UnifiedTaskRunner({
     loadStatistics();
   }, []);
 
-  const loadApiStatus = async () => {
+  const loadApiStatus = useCallback(async () => {
     try {
       const status = await getApiStatus();
       setApiStatus(status);
@@ -73,9 +75,9 @@ export function UnifiedTaskRunner({
     } catch (error: any) {
       console.error('Failed to load API status:', error);
     }
-  };
+  }, []);
 
-  const loadTaskHistory = async () => {
+  const loadTaskHistory = useCallback(async () => {
     setHistoryLoading(true);
     try {
       const history = await getTaskHistory(50, 0);
@@ -86,9 +88,9 @@ export function UnifiedTaskRunner({
     } finally {
       setHistoryLoading(false);
     }
-  };
+  }, []);
 
-  const loadStatistics = async () => {
+  const loadStatistics = useCallback(async () => {
     setStatsLoading(true);
     try {
       const stats = await getTaskStatistics();
@@ -99,49 +101,50 @@ export function UnifiedTaskRunner({
     } finally {
       setStatsLoading(false);
     }
-  };
+  }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Simplified submit handler using the hook
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!taskInput.trim() || isLoading) return;
+    e.stopPropagation(); // Stop event bubbling
 
-    setIsLoading(true);
+    if (!taskInput.trim()) {
+      console.log('🚫 Submission blocked: No input');
+      return;
+    }
+
+    console.log('🚀 Task submission initiated:', taskInput.trim());
+
     setError(null);
     setResult(null);
 
     try {
-      const taskRequest: TaskRequest = {
-        command: taskInput.trim(),
-        metadata: {
-          source: 'unified_task_runner',
-          timestamp: Date.now()
+      const taskResult = await submitTask(taskInput.trim());
+
+      if (taskResult) {
+        setResult(taskResult);
+
+        if (taskResult.success) {
+          setTaskInput(''); // Clear input on success
         }
-      };
 
-      const taskResult = await runTask(taskRequest);
-      setResult(taskResult);
-
-      if (taskResult.success) {
-        setTaskInput(''); // Clear input on success
+        // Refresh data
+        await Promise.all([
+          loadTaskHistory(),
+          loadStatistics()
+        ]);
       }
-
-      // Refresh data
-      await loadTaskHistory();
-      await loadStatistics();
-
     } catch (error: any) {
       setError(error.message);
-      console.error('Task execution failed:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('💥 Task execution failed:', error);
     }
-  };
+  }, [taskInput, submitTask, loadTaskHistory, loadStatistics]);
 
-  const handleSuggestedTask = (task: string) => {
+  const handleSuggestedTask = useCallback((task: string) => {
     setTaskInput(task);
-  };
+  }, []);
 
-  const handleClearHistory = async () => {
+  const handleClearHistory = useCallback(async () => {
     try {
       await clearTaskHistory();
       setTaskHistory(null);
@@ -150,7 +153,7 @@ export function UnifiedTaskRunner({
     } catch (error: any) {
       setError(error.message);
     }
-  };
+  }, []);
 
   const getResultIcon = (success: boolean) => {
     return success ? '✅' : '❌';
@@ -165,8 +168,8 @@ export function UnifiedTaskRunner({
     return date.toLocaleString();
   };
 
-  const renderTaskResult = (taskResult: TaskResponse) => {
-    const { success, result, execution_time, error } = taskResult;
+  const renderTaskResult = (taskResult: TaskResult) => {
+    const { success, output, error } = taskResult;
 
     return (
       <div className={`p-4 rounded-lg border ${success ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
@@ -178,20 +181,15 @@ export function UnifiedTaskRunner({
             </span>
           </div>
           <span className="text-sm text-gray-500">
-            {formatExecutionTime(execution_time * 1000)}
+            {success ? 'Completed' : 'Failed'}
           </span>
         </div>
 
         <div className="space-y-2">
           <div>
-            <span className="font-medium text-gray-700">Task ID:</span>
-            <span className="ml-2 text-gray-900 font-mono text-sm">{taskResult.id}</span>
-          </div>
-
-          <div>
-            <span className="font-medium text-gray-700">Result:</span>
+            <span className="font-medium text-gray-700">Output:</span>
             <pre className="mt-1 p-3 bg-gray-100 rounded text-sm overflow-x-auto">
-              {JSON.stringify(result, null, 2)}
+              {output || 'No output'}
             </pre>
           </div>
 
@@ -211,10 +209,10 @@ export function UnifiedTaskRunner({
       {/* Header */}
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          🚀 TRINITI Unified Task Runner
+          🚀 UNIFIED_TASK_RUNNER.TITLE
         </h2>
         <p className="text-gray-600">
-          Execute tasks with integrated backend API and memory system
+          UNIFIED_TASK_RUNNER.DESCRIPTION
         </p>
       </div>
 
@@ -264,17 +262,17 @@ export function UnifiedTaskRunner({
               placeholder="Enter a task command... (e.g., 'echo Hello World', 'ls -la')"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               rows={3}
-              disabled={isLoading}
+              disabled={isSubmitting}
             />
           </div>
 
           <div className="flex items-center justify-between">
             <button
               type="submit"
-              disabled={isLoading || !taskInput.trim()}
+              disabled={isSubmitting || !taskInput.trim()}
               className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
             >
-              {isLoading ? (
+              {isSubmitting ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                   <span>Executing...</span>

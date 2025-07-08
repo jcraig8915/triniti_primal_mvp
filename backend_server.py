@@ -1,201 +1,440 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+from pydantic import BaseModel
+from typing import Dict, Any, List, Optional
+import json
+import time
+import uuid
+from datetime import datetime
 
-app = FastAPI(title="OpenDevin Backend", version="0.48.0")
+app = FastAPI(title="TRINITI Backend Server", version="1.0.0")
 
-# Add CORS middleware
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    return {
-        "message": "OpenDevin Backend Server",
-        "status": "running",
-        "version": "0.48.0"
-    }
+# Task Execution Models
+class TaskExecutionRequest(BaseModel):
+    task: str
+    timestamp: Optional[int] = None
 
-@app.get("/health")
-async def health():
-    return {"status": "healthy", "service": "opendevin-backend"}
+class TaskExecutionResponse(BaseModel):
+    id: str
+    task: str
+    result: Any
+    success: bool
+    executionTime: int
+    timestamp: int
 
-@app.get("/api/status")
-async def api_status():
-    return {
-        "backend": "running",
-        "frontend": "http://localhost:3000",
-        "ready": True
-    }
+# In-memory storage for tasks (in production, use database)
+task_memory: List[Dict[str, Any]] = []
 
+class TaskExecutor:
+    """TRINITI Task Executor for MVP implementation"""
+
+    def __init__(self):
+        self.task_history = []
+
+    async def execute_task(self, task_request: TaskExecutionRequest) -> TaskExecutionResponse:
+        """Execute a task and record results in memory"""
+        start_time = time.time()
+        task_id = f"task_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}"
+
+        try:
+            # Execute the task
+            result = await self.run_task_simulation(task_request.task)
+
+            execution_response = TaskExecutionResponse(
+                id=task_id,
+                task=task_request.task,
+                result=result,
+                success=True,
+                executionTime=int((time.time() - start_time) * 1000),
+                timestamp=int(time.time() * 1000)
+            )
+
+            # Record successful execution in memory
+            self.record_task_execution(execution_response, success=True)
+
+            return execution_response
+
+        except Exception as error:
+            failure_response = TaskExecutionResponse(
+                id=task_id,
+                task=task_request.task,
+                result={"error": str(error), "type": "execution_error"},
+                success=False,
+                executionTime=int((time.time() - start_time) * 1000),
+                timestamp=int(time.time() * 1000)
+            )
+
+            # Record failed execution in memory
+            self.record_task_execution(failure_response, success=False)
+
+            return failure_response
+
+    async def run_task_simulation(self, task: str) -> Dict[str, Any]:
+        """MVP: Basic task simulation with common operations"""
+        task_lower = task.lower()
+
+        # Simulate processing delay
+        await asyncio.sleep(0.1)
+
+        # Greeting tasks
+        if any(word in task_lower for word in ['hello', 'hi', 'greet']):
+            return {
+                "type": "greeting",
+                "message": f"Hello! I processed your greeting: '{task}'",
+                "timestamp": datetime.now().isoformat(),
+                "status": "completed"
+            }
+
+        # File operations
+        elif any(word in task_lower for word in ['create file', 'new file', 'touch']):
+            filename = f"triniti_file_{int(time.time())}.txt"
+            return {
+                "type": "file_operation",
+                "action": "file_created",
+                "filename": filename,
+                "path": f"/tmp/{filename}",
+                "message": f"Created file: {filename}",
+                "status": "completed"
+            }
+
+        # List operations
+        elif any(word in task_lower for word in ['list', 'ls', 'dir', 'show files']):
+            return {
+                "type": "list_operation",
+                "files": [
+                    "/home/user/document1.txt",
+                    "/home/user/project/main.py",
+                    "/home/user/triniti/config.json"
+                ],
+                "count": 3,
+                "status": "completed"
+            }
+
+        # Search operations
+        elif any(word in task_lower for word in ['search', 'find', 'grep']):
+            return {
+                "type": "search_operation",
+                "query": task,
+                "results": [
+                    {"file": "main.py", "line": 15, "match": "def search_function"},
+                    {"file": "utils.py", "line": 8, "match": "search_pattern"}
+                ],
+                "count": 2,
+                "status": "completed"
+            }
+
+        # Git operations
+        elif any(word in task_lower for word in ['git', 'commit', 'push', 'pull']):
+            return {
+                "type": "git_operation",
+                "command": task,
+                "output": f"Executed git command: {task}",
+                "status": "completed",
+                "branch": "main"
+            }
+
+        # Code generation
+        elif any(word in task_lower for word in ['generate', 'create code', 'write function']):
+            return {
+                "type": "code_generation",
+                "language": "python",
+                "code": f"# Generated code for: {task}\ndef generated_function():\n    return 'Hello from generated code'",
+                "status": "completed"
+            }
+
+        # Default response
+        else:
+            return {
+                "type": "general",
+                "raw_output": f"Processed task: {task}",
+                "message": f"Task '{task}' has been processed successfully",
+                "status": "completed",
+                "timestamp": datetime.now().isoformat()
+            }
+
+    def record_task_execution(self, response: TaskExecutionResponse, success: bool):
+        """Record task execution in memory for TRINITI Memory System"""
+        memory_entry = {
+            "id": response.id,
+            "timestamp": response.timestamp,
+            "task": response.task,
+            "result": response.result,
+            "metadata": {
+                "success": success,
+                "duration": response.executionTime,
+                "errors": [] if success else [str(response.result.get("error", "Unknown error"))],
+                "tags": self.extract_tags(response.task),
+                "priority": 5
+            }
+        }
+
+        task_memory.append(memory_entry)
+
+        # Keep only last 1000 tasks in memory
+        if len(task_memory) > 1000:
+            task_memory.pop(0)
+
+    def extract_tags(self, task: str) -> List[str]:
+        """Extract relevant tags from task description"""
+        tags = []
+        task_lower = task.lower()
+
+        if any(word in task_lower for word in ['file', 'create', 'delete']):
+            tags.append('file_operations')
+        if any(word in task_lower for word in ['git', 'commit', 'push']):
+            tags.append('git')
+        if any(word in task_lower for word in ['search', 'find']):
+            tags.append('search')
+        if any(word in task_lower for word in ['code', 'generate', 'function']):
+            tags.append('code_generation')
+        if any(word in task_lower for word in ['hello', 'greet']):
+            tags.append('greeting')
+
+        return tags
+
+# Initialize task executor
+task_executor = TaskExecutor()
+
+# Task Execution Endpoint
+@app.post("/api/run-task", response_model=TaskExecutionResponse)
+async def run_task(request: TaskExecutionRequest):
+    """Execute a task and return results"""
+    try:
+        if not request.task or not request.task.strip():
+            raise HTTPException(status_code=400, detail="Task description is required")
+
+        # Set timestamp if not provided
+        if not request.timestamp:
+            request.timestamp = int(time.time() * 1000)
+
+        result = await task_executor.execute_task(request)
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Task execution failed: {str(e)}")
+
+# Task History Endpoint
+@app.get("/api/tasks")
+async def get_task_history(limit: int = 50, offset: int = 0):
+    """Get task execution history"""
+    try:
+        start = offset
+        end = start + limit
+        tasks = task_memory[start:end]
+
+        return {
+            "tasks": tasks,
+            "total": len(task_memory),
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve task history: {str(e)}")
+
+# Task Statistics Endpoint
+@app.get("/api/tasks/stats")
+async def get_task_statistics():
+    """Get task execution statistics"""
+    try:
+        total_tasks = len(task_memory)
+        successful_tasks = len([t for t in task_memory if t["metadata"]["success"]])
+        failed_tasks = total_tasks - successful_tasks
+
+        # Calculate average execution time
+        total_time = sum(t["metadata"]["duration"] for t in task_memory)
+        avg_time = total_time / total_tasks if total_tasks > 0 else 0
+
+        # Get most common tags
+        tag_counts = {}
+        for task in task_memory:
+            for tag in task["metadata"]["tags"]:
+                tag_counts[tag] = tag_counts.get(tag, 0) + 1
+
+        most_common_tags = sorted(tag_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+        return {
+            "totalTasks": total_tasks,
+            "successfulTasks": successful_tasks,
+            "failedTasks": failed_tasks,
+            "successRate": (successful_tasks / total_tasks * 100) if total_tasks > 0 else 0,
+            "averageExecutionTime": avg_time,
+            "mostCommonTags": [{"tag": tag, "count": count} for tag, count in most_common_tags]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to retrieve statistics: {str(e)}")
+
+# Clear Task History Endpoint
+@app.delete("/api/tasks")
+async def clear_task_history():
+    """Clear all task history"""
+    try:
+        global task_memory
+        task_memory.clear()
+        return {"message": "Task history cleared successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to clear task history: {str(e)}")
+
+# Existing endpoints (keeping for compatibility)
 @app.get("/api/options/config")
 async def get_config():
-    # Match the expected frontend structure
     return {
-        "APP_MODE": "oss",
-        "GITHUB_CLIENT_ID": "",
-        "POSTHOG_CLIENT_KEY": "phc_3ESMmY9SgqEAGBB6sMGK5ayYHkeUuknH2vP6FmWH9RA",
         "FEATURE_FLAGS": {
             "ENABLE_BILLING": False,
-            "HIDE_LLM_SETTINGS": False,
+            "ENABLE_MEMORY_SYSTEM": True,
+            "ENABLE_TASK_EXECUTION": True
         }
     }
 
 @app.get("/api/options/models")
 async def get_models():
     return {
-        "providers": {
-            "openai": ["gpt-4o", "gpt-3.5-turbo"],
-            "anthropic": ["claude-3-haiku"],
-        }
+        "models": [
+            {"id": "gpt-4", "name": "GPT-4", "provider": "openai"},
+            {"id": "claude-3", "name": "Claude 3", "provider": "anthropic"},
+            {"id": "gemini-pro", "name": "Gemini Pro", "provider": "google"}
+        ]
     }
 
 @app.get("/api/options/agents")
 async def get_agents():
-    return ["CodeActAgent"]
+    return {
+        "agents": [
+            {"id": "default", "name": "Default Agent", "type": "general"},
+            {"id": "code", "name": "Code Agent", "type": "programming"},
+            {"id": "research", "name": "Research Agent", "type": "analysis"}
+        ]
+    }
 
 @app.get("/api/options/security-analyzers")
 async def get_security_analyzers():
-    return ["bandit", "semgrep", "safety"]
-
-@app.get("/api/options/settings")
-async def get_settings():
-    # You can expand later; keeping it minimal for now
-    return {"orgName": "TRINITI-Dev", "defaultProvider": "openai"}
+    return {
+        "analyzers": [
+            {"id": "basic", "name": "Basic Security", "type": "static"},
+            {"id": "advanced", "name": "Advanced Security", "type": "dynamic"}
+        ]
+    }
 
 @app.get("/api/settings")
-async def get_api_settings():
-    # Return the proper settings structure that matches the frontend's Settings type
+async def get_settings():
     return {
-        "llm_model": "anthropic/claude-sonnet-4-20250514",
-        "llm_base_url": "",
-        "agent": "CodeActAgent",
-        "language": "en",
-        "llm_api_key_set": False,
-        "search_api_key_set": False,
-        "confirmation_mode": False,
-        "security_analyzer": "",
-        "remote_runtime_resource_factor": 1,
-        "provider_tokens_set": {
-            "github": None,
-            "gitlab": None,
-            "bitbucket": None
+        "PROVIDER_TOKENS_SET": {
+            "openai": True,
+            "anthropic": True,
+            "google": False
         },
-        "enable_default_condenser": True,
-        "enable_sound_notifications": False,
-        "enable_proactive_conversation_starters": False,
-        "user_consents_to_analytics": False,
-        "search_api_key": "",
-        "max_budget_per_task": None,
-        "email": "",
-        "email_verified": True,
-        "mcp_config": {
-            "sse_servers": [],
-            "stdio_servers": []
-        }
+        "GITHUB_TOKEN_SET": True,
+        "ENABLE_BILLING": False,
+        "ENABLE_MEMORY_SYSTEM": True,
+        "ENABLE_TASK_EXECUTION": True
     }
 
 @app.get("/api/user/info")
 async def get_user_info():
     return {
-        "id": 1,
-        "login": "demo-user",
-        "avatar_url": "https://avatars.githubusercontent.com/u/1?v=4",
-        "company": "TRINITI-Dev",
-        "name": "Demo User",
-        "email": "demo@triniti.dev"
+        "id": "user_123",
+        "name": "TRINITI User",
+        "email": "user@triniti.dev",
+        "preferences": {
+            "theme": "dark",
+            "language": "en"
+        }
     }
 
 @app.get("/api/user/repositories")
-async def get_user_repositories():
-    return [
-        {
-            "id": 1,
-            "name": "demo-repo",
-            "full_name": "demo-user/demo-repo",
-            "private": False,
-            "html_url": "https://github.com/demo-user/demo-repo",
-            "description": "A demo repository",
-            "fork": False,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z",
-            "pushed_at": "2024-01-01T00:00:00Z",
-            "language": "Python",
-            "default_branch": "main"
-        }
-    ]
+async def get_user_repositories(sort: str = "pushed"):
+    return {
+        "repositories": [
+            {
+                "id": "repo_1",
+                "name": "triniti-project",
+                "full_name": "user/triniti-project",
+                "description": "TRINITI AI Development Platform",
+                "language": "TypeScript",
+                "updated_at": "2024-01-15T10:30:00Z"
+            },
+            {
+                "id": "repo_2",
+                "name": "demo-repo",
+                "full_name": "user/demo-repo",
+                "description": "Demo repository for testing",
+                "language": "Python",
+                "updated_at": "2024-01-10T15:45:00Z"
+            }
+        ]
+    }
 
 @app.get("/api/user/search/repositories")
-async def search_user_repositories():
-    return [
-        {
-            "id": 1,
-            "name": "demo-repo",
-            "full_name": "demo-user/demo-repo",
-            "private": False,
-            "html_url": "https://github.com/demo-user/demo-repo",
-            "description": "A demo repository",
-            "fork": False,
-            "created_at": "2024-01-01T00:00:00Z",
-            "updated_at": "2024-01-01T00:00:00Z",
-            "pushed_at": "2024-01-01T00:00:00Z",
-            "language": "Python",
-            "default_branch": "main"
-        }
-    ]
+async def search_repositories(query: str, per_page: int = 5):
+    return {
+        "repositories": [
+            {
+                "id": "search_1",
+                "name": f"{query}-project",
+                "full_name": f"user/{query}-project",
+                "description": f"Project related to {query}",
+                "language": "JavaScript"
+            }
+        ]
+    }
 
 @app.get("/api/user/repository/branches")
-async def get_repository_branches():
-    return [
-        {
-            "name": "main",
-            "commit": {
-                "sha": "abc123",
-                "url": "https://api.github.com/repos/demo-user/demo-repo/commits/abc123"
-            },
-            "protected": False
-        },
-        {
-            "name": "develop",
-            "commit": {
-                "sha": "def456",
-                "url": "https://api.github.com/repos/demo-user/demo-repo/commits/def456"
-            },
-            "protected": False
-        }
-    ]
+async def get_repository_branches(repository: str):
+    return {
+        "branches": [
+            {"name": "main", "commit": {"sha": "abc123"}},
+            {"name": "develop", "commit": {"sha": "def456"}},
+            {"name": "feature/new-feature", "commit": {"sha": "ghi789"}}
+        ]
+    }
+
+@app.get("/api/user/suggested-tasks")
+async def get_suggested_tasks():
+    return {
+        "tasks": [
+            "Create a new React component",
+            "Fix authentication bug",
+            "Add unit tests",
+            "Update documentation",
+            "Deploy to production"
+        ]
+    }
+
+@app.get("/api/conversations")
+async def get_conversations(limit: int = 20):
+    return {
+        "conversations": [
+            {
+                "id": "conv_1",
+                "title": "React Component Development",
+                "last_message": "Component created successfully",
+                "timestamp": "2024-01-15T10:30:00Z"
+            }
+        ]
+    }
 
 @app.get("/api/secrets")
 async def get_secrets():
     return {
-        "secrets": [],
-        "total": 0
+        "secrets": [
+            {
+                "id": "secret_1",
+                "name": "API_KEY",
+                "type": "environment",
+                "last_used": "2024-01-15T10:30:00Z"
+            }
+        ]
     }
 
-@app.get("/api/security/policy")
-async def get_security_policy():
-    return {"enabled": False, "rules": []}
-
-@app.get("/api/security/settings")
-async def get_security_settings():
-    return {"enabled": False, "analyzers": []}
-
-@app.get("/api/user/suggested-tasks")
-async def get_suggested_tasks():
-    return {"tasks": []}
-
-@app.get("/api/conversations")
-async def list_conversations():
-    return []                       # empty history is fine
-
 if __name__ == "__main__":
-    print("🚀 Starting OpenDevin Backend Server...")
-    print("📍 Backend: http://localhost:3002")
-    print("📍 Frontend: http://localhost:3000")
-    print("Press CTRL+C to stop")
-    uvicorn.run(app, host="0.0.0.0", port=3002, reload=True)
+    import uvicorn
+    import asyncio
+    uvicorn.run(app, host="127.0.0.1", port=3000, reload=True)

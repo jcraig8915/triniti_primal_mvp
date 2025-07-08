@@ -4,9 +4,13 @@
  */
 
 import axios, { AxiosResponse } from 'axios';
+import { runTask as runTaskNL, runRawCommand } from '../services/task_runner';
+import { TaskResult } from '../types/task';
 
-// API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+// API Configuration - Use Vite environment variables
+const API_BASE_URL = import.meta.env.VITE_API_URL ||
+                    import.meta.env.REACT_APP_API_URL ||
+                    'http://localhost:3000';
 const API_TIMEOUT = 30000; // 30 seconds
 
 // Configure axios defaults
@@ -58,32 +62,37 @@ export interface ApiError {
 }
 
 /**
- * Execute a task via the TRINITI API
+ * Execute a task via natural language processing
  */
-export async function runTask(taskRequest: TaskRequest): Promise<TaskResponse> {
+export async function runTask(taskRequest: TaskRequest): Promise<TaskResult> {
   try {
-    console.debug('Executing task:', taskRequest.command);
-
-    const response: AxiosResponse<TaskResponse> = await axios.post(
-      `${API_BASE_URL}/api/execute`,
-      taskRequest,
-      {
-        timeout: taskRequest.timeout || API_TIMEOUT
-      }
-    );
-
-    console.debug('Task executed successfully:', {
-      taskId: response.data.id,
-      success: response.data.success,
-      executionTime: response.data.execution_time
-    });
-
-    return response.data;
+    console.debug('Executing task with NL processing:', taskRequest.command);
+    return await runTaskNL(taskRequest.command);
   } catch (error: any) {
     console.error('Task execution failed:', error);
 
     const apiError: ApiError = {
       message: error.response?.data?.detail || error.message || 'Task execution failed',
+      status: error.response?.status || 500,
+      details: error.response?.data
+    };
+
+    throw apiError;
+  }
+}
+
+/**
+ * Execute a raw command directly (bypassing NL processing)
+ */
+export async function runRawTask(taskRequest: TaskRequest): Promise<TaskResult> {
+  try {
+    console.debug('Executing raw command:', taskRequest.command);
+    return await runRawCommand(taskRequest.command);
+  } catch (error: any) {
+    console.error('Raw task execution failed:', error);
+
+    const apiError: ApiError = {
+      message: error.response?.data?.detail || error.message || 'Raw task execution failed',
       status: error.response?.status || 500,
       details: error.response?.data
     };
@@ -230,5 +239,49 @@ export async function isApiAvailable(): Promise<boolean> {
     return true;
   } catch (error) {
     return false;
+  }
+}
+
+// TRINITI FileOps Integration - Drop 77
+export interface FileOperationRequest {
+  operation: "create" | "read" | "delete";
+  path: string;
+  content?: string;
+}
+
+export interface FileOperationResponse {
+  success: boolean;
+  output: string;
+}
+
+/**
+ * Execute file operations: create, read, delete
+ */
+export async function runFileOperation(
+  operation: "create" | "read" | "delete",
+  path: string,
+  content: string = ""
+): Promise<FileOperationResponse> {
+  try {
+    const response: AxiosResponse<FileOperationResponse> = await axios.post(
+      `${API_BASE_URL}/api/file-ops`,
+      {
+        operation,
+        path,
+        content
+      }
+    );
+
+    return response.data;
+  } catch (error: any) {
+    console.error('File operation failed:', error);
+
+    const apiError: ApiError = {
+      message: error.response?.data?.detail || error.message || 'File operation failed',
+      status: error.response?.status || 500,
+      details: error.response?.data
+    };
+
+    throw apiError;
   }
 }

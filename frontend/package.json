@@ -121,6 +121,7 @@
     "stripe": "^18.3.0",
     "tailwindcss": "^4.1.8",
     "typescript": "^5.8.3",
+    "vite-plugin-node-polyfills": "^0.24.0",
     "vite-plugin-svgr": "^4.2.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.0.2"

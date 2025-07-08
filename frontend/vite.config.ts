@@ -6,6 +6,7 @@ import svgr from "vite-plugin-svgr";
 import { reactRouter } from "@react-router/dev/vite";
 import { configDefaults } from "vitest/config";
 import tailwindcss from "@tailwindcss/vite";
+import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig(({ mode }) => {
   const {
@@ -16,7 +17,7 @@ export default defineConfig(({ mode }) => {
   } = loadEnv(mode, process.cwd());
 
   const USE_TLS = VITE_USE_TLS === "true";
-  const INSECURE_SKIP_VERIFY = VITE_INSECURE_SKIP_VERIFY === "true";
+  const INSECURE_SKIP_VERIFY = VITE_INSECURE_SKIP_VERIFY === "false";
   const PROTOCOL = USE_TLS ? "https" : "http";
   const WS_PROTOCOL = USE_TLS ? "wss" : "ws";
 
@@ -30,7 +31,28 @@ export default defineConfig(({ mode }) => {
       viteTsconfigPaths(),
       svgr(),
       tailwindcss(),
+      nodePolyfills({
+        // Whether to polyfill `node:` protocol imports.
+        protocolImports: true,
+      }),
     ],
+    define: {
+      // Define process.env for browser compatibility
+      'process.env': {
+        REACT_APP_API_URL: JSON.stringify(API_URL),
+        NODE_ENV: JSON.stringify(mode),
+      },
+      // Explicitly define process for browser compatibility
+      'process': {
+        env: {
+          REACT_APP_API_URL: JSON.stringify(API_URL),
+          NODE_ENV: JSON.stringify(mode),
+        }
+      },
+      // Define Vite environment variables
+      'import.meta.env.VITE_API_URL': JSON.stringify(API_URL),
+      'import.meta.env.DEV': JSON.stringify(mode === 'development'),
+    },
     server: {
       port: FE_PORT,
       host: true,

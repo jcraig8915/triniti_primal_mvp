@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, Any, List, Optional
@@ -6,6 +6,7 @@ import json
 import time
 import uuid
 import asyncio
+import os
 from datetime import datetime
 
 app = FastAPI(title="TRINITI Backend Server", version="1.0.0")
@@ -91,6 +92,62 @@ class TaskExecutor:
         # Simulate processing delay
         await asyncio.sleep(0.1)
 
+        # File operations with explicit format: file_operation:operation:path:content
+        if task.startswith('file_operation:'):
+            try:
+                parts = task.split(':', 3)  # Split into max 4 parts
+                if len(parts) >= 3:
+                    operation = parts[1]
+                    path = parts[2]
+                    content = parts[3] if len(parts) > 3 else ""
+
+                    # Call the file operations endpoint logic
+                    result = {"success": False, "output": ""}
+
+                    try:
+                        if operation == "create":
+                            os.makedirs(os.path.dirname(path), exist_ok=True)
+                            with open(path, "w", encoding="utf-8") as f:
+                                f.write(content)
+                            result.update({"success": True, "output": f"File created at {path}"})
+
+                        elif operation == "read":
+                            if not os.path.exists(path):
+                                result["output"] = f"File not found: {path}"
+                            else:
+                                with open(path, "r", encoding="utf-8") as f:
+                                    result.update({"success": True, "output": f.read()})
+
+                        elif operation == "delete":
+                            if not os.path.exists(path):
+                                result["output"] = f"File not found: {path}"
+                            else:
+                                os.remove(path)
+                                result.update({"success": True, "output": f"File deleted at {path}"})
+
+                        else:
+                            result["output"] = f"Invalid operation: {operation}. Supported: create, read, delete"
+
+                    except Exception as e:
+                        result["output"] = f"File operation failed: {str(e)}"
+
+                    return {
+                        "type": "file_operation",
+                        "operation": operation,
+                        "path": path,
+                        "content": content,
+                        "result": result,
+                        "success": result["success"],
+                        "message": result["output"],
+                        "status": "completed" if result["success"] else "failed"
+                    }
+            except Exception as e:
+                return {
+                    "type": "file_operation",
+                    "error": f"Failed to parse file operation: {str(e)}",
+                    "status": "failed"
+                }
+
         # Greeting tasks
         if any(word in task_lower for word in ['hello', 'hi', 'greet']):
             return {
@@ -169,6 +226,12 @@ class TaskExecutor:
 
     def record_task_execution(self, response: TaskExecutionResponse, success: bool):
         """Record task execution in memory for TRINITI Memory System"""
+        # Check for duplicate task ID to prevent duplicates
+        existing_task = next((task for task in task_memory if task["id"] == response.id), None)
+        if existing_task:
+            print(f"⚠️ Duplicate task ID detected, skipping: {response.id}")
+            return
+
         memory_entry = {
             "id": response.id,
             "timestamp": response.timestamp,
@@ -277,11 +340,14 @@ async def execute_task_unified(req: UnifiedTaskRequest):
 
         execution_time = time.time() - start_time
 
-                # Record execution in memory system
+        # Use the result's ID (which was generated in execute_task) for consistency
+        final_task_id = result.id
+
+        # Record execution in memory system
         task_executor.record_task_execution(result, result.success)
 
         return UnifiedTaskResponse(
-            id=task_id,
+            id=final_task_id,
             success=result.success,
             result=result.result,
             execution_time=execution_time,
@@ -308,7 +374,7 @@ async def execute_task_unified(req: UnifiedTaskRequest):
         task_executor.record_task_execution(failure_response, False)
 
         return UnifiedTaskResponse(
-            id=task_id,
+            id=task_id,  # Use the original task_id for error cases
             success=False,
             result={'error': error_message},
             execution_time=execution_time,
@@ -573,6 +639,73 @@ async def get_secrets():
             }
         ]
     }
+
+# TRINITI FileOps Integration - Drop 77
+@app.post("/api/file-ops")
+async def file_ops(request: Request):
+    """
+    Handle file operations: create, read, delete
+    """
+    try:
+        data = await request.json()
+        operation = data.get("operation")
+        path = data.get("path")
+        content = data.get("content", "")
+
+        result = {"success": False, "output": ""}
+
+        if not path:
+            result["output"] = "Path is required"
+            return result
+
+        try:
+            if operation == "create":
+                # Ensure directory exists
+                os.makedirs(os.path.dirname(path), exist_ok=True)
+                with open(path, "w", encoding="utf-8") as f:
+                    f.write(content)
+                result.update({"success": True, "output": f"File created at {path}"})
+
+            elif operation == "read":
+                if not os.path.exists(path):
+                    result["output"] = f"File not found: {path}"
+                else:
+                    with open(path, "r", encoding="utf-8") as f:
+                        result.update({"success": True, "output": f.read()})
+
+            elif operation == "delete":
+                if not os.path.exists(path):
+                    result["output"] = f"File not found: {path}"
+                else:
+                    os.remove(path)
+                    result.update({"success": True, "output": f"File deleted at {path}"})
+
+            else:
+                result["output"] = f"Invalid operation: {operation}. Supported: create, read, delete"
+
+        except Exception as e:
+            result["output"] = f"File operation failed: {str(e)}"
+
+        # Record in memory system
+        try:
+            task_executor.record_task_execution(
+                TaskExecutionResponse(
+                    id=f"fileops_{int(time.time() * 1000)}_{uuid.uuid4().hex[:8]}",
+                    task=f"FileOps: {operation} -> {path}",
+                    result=result,
+                    success=result["success"],
+                    executionTime=0,
+                    timestamp=int(time.time() * 1000)
+                ),
+                result["success"]
+            )
+        except Exception as mem_error:
+            print(f"Failed to record file operation in memory: {mem_error}")
+
+        return result
+
+    except Exception as e:
+        return {"success": False, "output": f"Request processing failed: {str(e)}"}
 
 if __name__ == "__main__":
     import uvicorn

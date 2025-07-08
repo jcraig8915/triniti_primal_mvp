@@ -52,7 +52,10 @@ export function UnifiedTaskRunner({
     'TASK_SUGGESTIONS.LIST_FILES',
     'TASK_SUGGESTIONS.SEARCH_FUNCTIONS',
     'TASK_SUGGESTIONS.GENERATE_COMPONENT',
-    'TASK_SUGGESTIONS.GIT_COMMIT'
+    'TASK_SUGGESTIONS.GIT_COMMIT',
+    'file_operation:create:./test.txt:Hello TRINITI!',
+    'file_operation:read:./test.txt',
+    'file_operation:delete:./test.txt'
   ]);
 
   // Use the task submission hook
@@ -408,9 +411,9 @@ export function UnifiedTaskRunner({
             </div>
           ) : taskHistory && taskHistory.tasks.length > 0 ? (
             <div className="space-y-3 max-h-96 overflow-y-auto">
-              {taskHistory.tasks.map((task) => (
+              {taskHistory.tasks.map((task, index) => (
                 <div
-                  key={task.id}
+                  key={`task_${task.id}_${index}`}
                   className="p-3 border border-gray-200 rounded-lg hover:bg-gray-50"
                 >
                   <div className="flex items-center justify-between">

@@ -17,6 +17,9 @@ import OpenHands from "./api/open-hands";
 import { displayErrorToast } from "./utils/custom-toast-handlers";
 import { queryClient } from "./query-client-config";
 
+// Import TRINITI diagnostic utility
+import "./utils/triniti-debug";
+
 function PosthogInit() {
   const [posthogClientKey, setPosthogClientKey] = React.useState<string | null>(
     null,
@@ -47,7 +50,7 @@ function PosthogInit() {
 
 async function prepareApp() {
   if (
-    process.env.NODE_ENV === "development" &&
+    import.meta.env.DEV &&
     import.meta.env.VITE_MOCK_API === "true"
   ) {
     const { worker } = await import("./mocks/browser");

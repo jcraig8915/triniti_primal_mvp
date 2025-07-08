@@ -4,7 +4,7 @@
  * A utility class for logging events. This class will only log events in development mode.
  */
 class EventLogger {
-  static isDevMode = process.env.NODE_ENV === "development";
+  static isDevMode = import.meta.env.DEV || import.meta.env.NODE_ENV === "development";
 
   /**
    * Format and log a message event

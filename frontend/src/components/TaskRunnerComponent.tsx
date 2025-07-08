@@ -53,12 +53,12 @@ export function TaskRunnerComponent({
 
   const [taskInput, setTaskInput] = useState('');
   const [suggestedTasks] = useState([
-    'Hello, how are you?',
-    'Create a new file',
-    'List files in directory',
-    'Search for functions',
-    'Generate a React component',
-    'Git commit changes'
+    'TASK_SUGGESTIONS.GREETING',
+    'TASK_SUGGESTIONS.CREATE_FILE',
+    'TASK_SUGGESTIONS.LIST_FILES',
+    'TASK_SUGGESTIONS.SEARCH_FUNCTIONS',
+    'TASK_SUGGESTIONS.GENERATE_COMPONENT',
+    'TASK_SUGGESTIONS.GIT_COMMIT'
   ]);
 
   // Load initial data
@@ -132,10 +132,10 @@ export function TaskRunnerComponent({
       {/* Header */}
       <div className="text-center">
         <h2 className="text-2xl font-bold text-gray-900 mb-2">
-          🚀 TRINITI Task Runner
+          🚀 TASK_RUNNER.TITLE
         </h2>
         <p className="text-gray-600">
-          Execute tasks and see results in real-time
+          TASK_RUNNER.DESCRIPTION
         </p>
       </div>
 
@@ -144,13 +144,13 @@ export function TaskRunnerComponent({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="taskInput" className="block text-sm font-medium text-gray-700 mb-2">
-              Enter Task
+              TASK_RUNNER.ENTER_TASK
             </label>
             <textarea
               id="taskInput"
               value={taskInput}
               onChange={(e) => setTaskInput(e.target.value)}
-              placeholder="Describe what you want to do... (e.g., 'Create a new file', 'Search for functions')"
+              placeholder="TASK_RUNNER.PLACEHOLDER"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
               rows={3}
               disabled={isLoading}
@@ -166,12 +166,12 @@ export function TaskRunnerComponent({
               {isLoading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                  <span>Running...</span>
+                  <span>TASK_RUNNER.RUNNING</span>
                 </>
               ) : (
                 <>
                   <span>🚀</span>
-                  <span>Run Task</span>
+                  <span>TASK_RUNNER.RUN_TASK</span>
                 </>
               )}
             </button>
@@ -182,7 +182,7 @@ export function TaskRunnerComponent({
                 onClick={clearError}
                 className="text-sm text-red-600 hover:text-red-800"
               >
-                Clear Error
+                TASK_RUNNER.CLEAR_ERROR
               </button>
             )}
           </div>

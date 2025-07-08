@@ -93,7 +93,8 @@ function Start-Backend {
         Set-Location backend
         .venv\Scripts\Activate.ps1
         Write-Host "🚀 Starting TRINITI Backend Server on port $BackendPort..." -ForegroundColor Green
-        python -m uvicorn app.main:app --host 0.0.0.0 --port $BackendPort --reload
+        cd ..
+        python backend_server.py
 "@
 
     Start-Process powershell -ArgumentList "-Command", $backendScript -NoNewWindow

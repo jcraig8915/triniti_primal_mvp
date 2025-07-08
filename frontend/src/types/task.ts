@@ -5,17 +5,19 @@
  */
 
 export interface TaskExecutionRequest {
-  task: string;
-  timestamp?: number;
+  command: string;
+  metadata?: Record<string, any>;
+  timeout?: number;
 }
 
 export interface TaskExecutionResponse {
   id: string;
-  task: string;
-  result: any;
   success: boolean;
-  executionTime: number;
+  result: any;
+  execution_time: number;
   timestamp: number;
+  metadata?: Record<string, any>;
+  error?: string;
 }
 
 export interface TaskHistoryResponse {
@@ -35,23 +37,9 @@ export interface TaskStatistics {
 }
 
 export interface TaskResult {
-  type: 'greeting' | 'file_operation' | 'list_operation' | 'search_operation' | 'git_operation' | 'code_generation' | 'general';
-  message?: string;
-  action?: string;
-  filename?: string;
-  path?: string;
-  files?: string[];
-  count?: number;
-  query?: string;
-  results?: Array<{ file: string; line: number; match: string }>;
-  command?: string;
-  output?: string;
-  branch?: string;
-  language?: string;
-  code?: string;
-  raw_output?: string;
-  status: 'completed' | 'failed' | 'pending';
-  timestamp?: string;
+  success: boolean;
+  output: string;
+  error?: string;
 }
 
 export interface TaskMetadata {
@@ -105,4 +93,14 @@ export interface TaskExecutionConfig {
   enableLogging: boolean;
   enableMetrics: boolean;
   enableMemoryIntegration: boolean;
+}
+
+/**
+ * TRINITI Task Types
+ * Core interfaces for task command routing and execution results
+ */
+
+export interface TaskCommand {
+  raw: string;          // Actual executable command
+  description: string;  // Original natural language description
 }

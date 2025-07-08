@@ -277,6 +277,9 @@ async def execute_task_unified(req: UnifiedTaskRequest):
 
         execution_time = time.time() - start_time
 
+                # Record execution in memory system
+        task_executor.record_task_execution(result, result.success)
+
         return UnifiedTaskResponse(
             id=task_id,
             success=result.success,
@@ -290,6 +293,19 @@ async def execute_task_unified(req: UnifiedTaskRequest):
     except Exception as e:
         execution_time = time.time() - start_time
         error_message = str(e)
+
+        # Create failure response for memory recording
+        failure_response = TaskExecutionResponse(
+            id=task_id,
+            task=req.command,
+            result={'error': error_message},
+            success=False,
+            executionTime=int(execution_time * 1000),
+            timestamp=int(time.time() * 1000)
+        )
+
+        # Record failure in memory system
+        task_executor.record_task_execution(failure_response, False)
 
         return UnifiedTaskResponse(
             id=task_id,
